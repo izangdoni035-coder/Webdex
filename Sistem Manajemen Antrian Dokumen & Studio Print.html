@@ -1,0 +1,1651 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Manajemen Antrian Dokumen & Studio Print</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f3ff',
+                            100: '#e0e7ff',
+                            500: '#4338ca',
+                            600: '#3730a3',
+                            700: '#312e81',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Fabric.js Canvas Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <!-- JsBarcode Library -->
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <!-- QRCode.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .font-heading {
+            font-family: 'Montserrat', sans-serif;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        
+        /* Canvas Wrapper Shadow */
+        .canvas-container {
+            margin: 0 auto !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            background-color: #ffffff;
+        }
+
+        /* Dynamic Print Styles */
+        @media print {
+            body * {
+                visibility: hidden !important;
+            }
+            #print-area-wrapper, #print-area-wrapper * {
+                visibility: visible !important;
+            }
+            #print-area-wrapper {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: white !important;
+                box-shadow: none !important;
+            }
+            #print-area-wrapper img {
+                width: 100% !important;
+                height: auto !important;
+                display: block !important;
+            }
+            @page {
+                size: auto;
+                margin: 0mm;
+            }
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col antialiased text-slate-800">
+
+    <!-- TOP NAVIGATION BAR -->
+    <header class="bg-indigo-900 text-white shadow-md print:hidden sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Brand / Logo -->
+                <div class="flex items-center gap-3">
+                    <div class="bg-white text-indigo-900 p-2 rounded-lg font-bold flex items-center justify-center w-10 h-10 shadow-inner">
+                        <i class="fa-solid fa-print text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-heading font-bold text-lg tracking-wide leading-tight">DocuPrint Studio</h1>
+                        <p class="text-xs text-indigo-200">Sistem Antrian & Studio Cetak Mandiri</p>
+                    </div>
+                </div>
+
+                <!-- Panel Switcher Controls & Admin Auth Status -->
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center bg-indigo-950/60 p-1 rounded-xl border border-indigo-700/50">
+                        <button id="btn-nav-public" onclick="switchPanel('public')" class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 bg-indigo-600 text-white shadow-sm">
+                            <i class="fa-solid fa-user-pen"></i>
+                            <span class="hidden sm:inline">Panel Pendaftaran (Public)</span>
+                        </button>
+                        <button id="btn-nav-admin" onclick="switchPanel('admin')" class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 text-indigo-200 hover:text-white hover:bg-indigo-800/50">
+                            <i class="fa-solid fa-user-shield"></i>
+                            <span class="hidden sm:inline">Panel Administrasi (Admin)</span>
+                        </button>
+                    </div>
+
+                    <!-- Admin Logout Button (Visible when logged in) -->
+                    <button id="btn-admin-logout" onclick="logoutAdmin()" class="hidden bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold py-2 px-3 rounded-lg shadow transition flex items-center gap-1.5" title="Keluar Administrasi">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                        <span class="hidden md:inline">Logout</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main class="flex-1 overflow-x-hidden">
+        
+        <!-- ========================================== -->
+        <!-- PUBLIC PANEL (PENDAFTARAN & TIKET) -->
+        <!-- ========================================== -->
+        <section id="panel-public" class="max-w-4xl mx-auto p-4 sm:p-6 md:p-8">
+            <div id="public-form-container" class="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
+                <div class="bg-gradient-to-r from-indigo-800 to-indigo-900 px-6 py-8 text-white">
+                    <h2 class="font-heading text-2xl font-bold mb-2">Formulir Pendaftaran Antrian</h2>
+                    <p class="text-indigo-200 text-sm">Silakan lengkapi data diri dan unggah berkas dokumen yang hendak dicetak atau diverifikasi.</p>
+                </div>
+
+                <form id="form-registration" onsubmit="handleRegistration(event)" class="p-6 sm:p-8 space-y-6">
+                    <!-- Nama Lengkap -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Nama Lengkap Pemohon <span class="text-rose-500">*</span></label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                                <i class="fa-solid fa-user"></i>
+                            </span>
+                            <input type="text" id="reg-name" required placeholder="Contoh: Budi Santoso" class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition outline-none text-sm">
+                        </div>
+                    </div>
+
+                    <!-- Nomor Order & Jenis Layanan Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-2">Nomor Order / Referensi <span class="text-rose-500">*</span></label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                                    <i class="fa-solid fa-hashtag"></i>
+                                </span>
+                                <input type="text" id="reg-order" required placeholder="Contoh: ORD-2026-881" class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition outline-none text-sm font-mono uppercase">
+                            </div>
+                            <span class="text-xs text-slate-400 mt-1 block">Dapat diisi manual atau nomor nota fisik anda.</span>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-2">Keperluan / Jenis Layanan <span class="text-rose-500">*</span></label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                                    <i class="fa-solid fa-briefcase"></i>
+                                </span>
+                                <select id="reg-service" required class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition outline-none text-sm bg-white">
+                                    <option value="">-- Pilih Jenis Layanan --</option>
+                                    <option value="Cetak Dokumen Resmi">Cetak Dokumen Resmi</option>
+                                    <option value="Cetak Sertifikat / ID Card">Cetak Sertifikat / ID Card</option>
+                                    <option value="Verifikasi & Stamp Legalitas">Verifikasi & Stamp Legalitas</option>
+                                    <option value="Cetak Thermal Receipt / Label">Cetak Thermal Receipt / Label</option>
+                                    <option value="Lainnya">Lainnya</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Unggah Berkas Dokumen -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Unggah Berkas Dokumen (Gambar Preview) <span class="text-rose-500">*</span></label>
+                        <div class="border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-2xl p-6 text-center bg-slate-50 transition cursor-pointer relative group" id="drop-zone">
+                            <input type="file" id="reg-file" accept="image/*" required onchange="handleFileSelect(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                            <div class="space-y-2">
+                                <div class="w-12 h-12 mx-auto rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition">
+                                    <i class="fa-solid fa-cloud-arrow-up text-xl"></i>
+                                </div>
+                                <div class="text-sm font-medium text-slate-700">
+                                    <span class="text-indigo-600 font-semibold">Klik untuk merambahi</span> atau seret file ke sini
+                                </div>
+                                <p class="text-xs text-slate-400">Format yang didukung: PNG, JPG, JPEG, WEBP (Maks. 5MB)</p>
+                            </div>
+                        </div>
+
+                        <!-- Instant Preview Container -->
+                        <div id="file-preview-container" class="hidden mt-4 p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl flex items-center justify-between">
+                            <div class="flex items-center space-x-3 overflow-hidden">
+                                <img id="preview-thumbnail" src="" class="w-14 h-14 object-cover rounded-lg border border-slate-200 shadow-sm cursor-pointer hover:opacity-90" onclick="openPreviewModal()">
+                                <div class="truncate">
+                                    <p id="preview-filename" class="text-sm font-semibold text-slate-800 truncate"></p>
+                                    <p id="preview-filesize" class="text-xs text-slate-500"></p>
+                                    <span class="inline-flex items-center text-[10px] text-emerald-700 font-medium bg-emerald-100 px-2 py-0.5 rounded-full mt-1">
+                                        <i class="fa-solid fa-circle-check mr-1 text-[8px]"></i> Siap diunggah
+                                    </span>
+                                </div>
+                            </div>
+                            <button type="button" onclick="clearFileSelection()" class="text-slate-400 hover:text-rose-500 p-2 rounded-lg hover:bg-white transition">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="pt-4">
+                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold py-3.5 px-6 rounded-xl shadow-lg shadow-indigo-600/30 transition duration-200 flex items-center justify-center space-x-2">
+                            <i class="fa-solid fa-paper-plane"></i>
+                            <span>Daftar Antrian Sekarang</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- DIGITAL TICKET RESULT CONTAINER (Hidden initially) -->
+            <div id="public-ticket-container" class="hidden space-y-6">
+                <div class="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden max-w-md mx-auto relative">
+                    <!-- Ticket Top Decor -->
+                    <div class="bg-indigo-900 p-6 text-center text-white relative">
+                        <span class="inline-block px-3 py-1 bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider rounded-full mb-2">Pendaftaran Berhasil</span>
+                        <h3 class="font-heading text-xl font-bold">TIKET ANTRIAN DIGITAL</h3>
+                        <p class="text-xs text-indigo-200 mt-1">DocuPrint Studio Management System</p>
+                    </div>
+
+                    <!-- Ticket Cutouts (Visual Effect) -->
+                    <div class="relative bg-white py-6 px-8 border-b-2 border-dashed border-slate-200">
+                        <div class="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-slate-50 rounded-full border-r border-slate-200"></div>
+                        <div class="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-slate-50 rounded-full border-l border-slate-200"></div>
+
+                        <!-- Ticket Details -->
+                        <div class="text-center space-y-3">
+                            <div>
+                                <span class="text-xs uppercase font-semibold tracking-wider text-slate-400">Nomor Antrian Anda</span>
+                                <div id="ticket-number" class="font-heading text-5xl font-extrabold text-indigo-600 my-1 tracking-tight">A-000</div>
+                            </div>
+                            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 text-left space-y-1.5 text-xs">
+                                <div class="flex justify-between"><span class="text-slate-500">Nama Pemohon:</span><span id="ticket-name" class="font-semibold text-slate-800"></span></div>
+                                <div class="flex justify-between"><span class="text-slate-500">Nomor Order:</span><span id="ticket-order" class="font-mono font-semibold text-slate-800"></span></div>
+                                <div class="flex justify-between"><span class="text-slate-500">Layanan:</span><span id="ticket-service" class="font-semibold text-indigo-600"></span></div>
+                                <div class="flex justify-between"><span class="text-slate-500">Waktu Daftar:</span><span id="ticket-time" class="text-slate-700"></span></div>
+                                <div class="flex justify-between items-center"><span class="text-slate-500">Status:</span><span id="ticket-status" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">Menunggu</span></div>
+                            </div>
+
+                            <!-- QR Code & Barcode Display -->
+                            <div class="pt-3 flex flex-col items-center justify-center space-y-2">
+                                <div id="ticket-qrcode" class="p-2 bg-white rounded-lg border border-slate-200 shadow-sm inline-block"></div>
+                                <svg id="ticket-barcode" class="w-full max-w-[200px] h-12"></svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ticket Footer Actions -->
+                    <div class="p-6 bg-slate-50 flex flex-col gap-3">
+                        <button onclick="window.print()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-2.5 px-4 rounded-xl text-sm transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-print"></i>
+                            <span>Cetak Tiket Digital</span>
+                        </button>
+                        <button onclick="resetPublicForm()" class="w-full bg-white hover:bg-slate-100 text-slate-700 font-medium py-2.5 px-4 rounded-xl border border-slate-300 text-sm transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-rotate-right"></i>
+                            <span>Daftar Antrian Baru</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ========================================== -->
+        <!-- ADMIN LOGIN MODAL / CARD -->
+        <!-- ========================================== -->
+        <div id="admin-login-modal" class="hidden fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-100 animate-fade-in">
+                <div class="bg-indigo-900 p-6 text-white text-center">
+                    <div class="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <i class="fa-solid fa-lock text-2xl text-amber-400"></i>
+                    </div>
+                    <h3 class="font-heading text-xl font-bold">Akses Terkunci Admin</h3>
+                    <p class="text-xs text-indigo-200 mt-1">Masukkan Kata Sandi untuk mengakses Panel Administrasi</p>
+                </div>
+
+                <form onsubmit="handleAdminLogin(event)" class="p-6 space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-2">Kata Sandi Administrasi</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 text-xs">
+                                <i class="fa-solid fa-key"></i>
+                            </span>
+                            <input type="password" id="admin-pass-input" required placeholder="Masukkan kata sandi..." class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+                        </div>
+                        <p id="admin-login-error" class="text-xs text-rose-500 font-medium mt-1.5 hidden flex items-center gap-1">
+                            <i class="fa-solid fa-circle-exclamation"></i>
+                            <span>Kata sandi tidak valid. Silakan coba lagi.</span>
+                        </p>
+                    </div>
+
+                    <div class="pt-2 flex items-center gap-2">
+                        <button type="button" onclick="switchPanel('public')" class="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-xl text-xs transition">
+                            Batal
+                        </button>
+                        <button type="submit" class="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-xs shadow-md transition">
+                            Buka Akses
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- ADMIN PANEL (3 SUB-PAGES) -->
+        <!-- ========================================== -->
+        <section id="panel-admin" class="hidden min-h-[calc(100vh-4rem)] flex flex-col">
+            <!-- Sub-Page Tab Navigation Header -->
+            <div class="bg-white border-b border-slate-200 sticky top-16 z-30 shadow-sm">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <nav class="flex space-x-8 overflow-x-auto" aria-label="Tabs">
+                        <button id="admin-tab-queue" onclick="switchAdminSubPage('queue')" class="border-indigo-600 text-indigo-600 border-b-2 py-4 px-1 text-sm font-semibold whitespace-nowrap flex items-center gap-2">
+                            <i class="fa-solid fa-list-check"></i>
+                            <span>Daftar Antrian Aktif</span>
+                            <span id="badge-waiting-count" class="ml-1 bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full font-bold">0</span>
+                        </button>
+
+                        <button id="admin-tab-history" onclick="switchAdminSubPage('history')" class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 border-b-2 py-4 px-1 text-sm font-semibold whitespace-nowrap flex items-center gap-2">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>Riwayat Antrian</span>
+                        </button>
+
+                        <button id="admin-tab-studio" onclick="switchAdminSubPage('studio')" class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 border-b-2 py-4 px-1 text-sm font-semibold whitespace-nowrap flex items-center gap-2">
+                            <i class="fa-solid fa-wand-magic-sparkles text-indigo-500"></i>
+                            <span>Studio Print Canva-Style</span>
+                        </button>
+                    </nav>
+                </div>
+            </div>
+
+            <!-- SUB-PAGE 1: DAFTAR ANTRIAN AKTIF -->
+            <div id="admin-sub-queue" class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 w-full flex-1">
+                <!-- Top Status Bar & Controls -->
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                    <div>
+                        <h2 class="font-heading text-xl font-bold text-slate-800">Manajemen Antrian Aktif</h2>
+                        <p class="text-xs text-slate-500">Kelola panggil antrian, update status, dan teruskan dokumen ke studio cetak.</p>
+                    </div>
+
+                    <!-- Filter Status Tabs -->
+                    <div class="flex items-center gap-1 bg-slate-200/70 p-1 rounded-xl text-xs font-medium self-start md:self-auto">
+                        <button onclick="filterQueueStatus('all')" id="qfilter-all" class="px-3 py-1.5 rounded-lg bg-white text-slate-800 shadow-sm font-semibold">Semua</button>
+                        <button onclick="filterQueueStatus('Menunggu')" id="qfilter-waiting" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900">Menunggu</button>
+                        <button onclick="filterQueueStatus('Diproses')" id="qfilter-processing" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900">Diproses</button>
+                        <button onclick="filterQueueStatus('Selesai')" id="qfilter-completed" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900">Selesai/Batal</button>
+                    </div>
+                </div>
+
+                <!-- Queue Cards Grid -->
+                <div id="queue-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Dynamic Items Inserted via JavaScript -->
+                </div>
+
+                <!-- Empty State -->
+                <div id="queue-empty" class="hidden bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
+                    <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-400 mb-3">
+                        <i class="fa-solid fa-inbox text-2xl"></i>
+                    </div>
+                    <h3 class="text-base font-semibold text-slate-700">Belum Ada Antrian</h3>
+                    <p class="text-xs text-slate-400 mt-1">Antrian yang didaftarkan pemohon akan muncul secara realtime di sini.</p>
+                </div>
+            </div>
+
+            <!-- SUB-PAGE 2: RIWAYAT ANTRIAN -->
+            <div id="admin-sub-history" class="hidden max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 w-full flex-1">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <!-- History Controls Header -->
+                    <div class="p-6 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <h2 class="font-heading text-xl font-bold text-slate-800">Riwayat & Log Antrian</h2>
+                            <p class="text-xs text-slate-500">Histori pendaftaran dengan fitur pencarian dan unduh laporan CSV.</p>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-3">
+                            <!-- Search Bar -->
+                            <div class="relative flex-1 sm:w-64">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 text-xs">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                </span>
+                                <input type="text" id="history-search" oninput="renderHistoryTable()" placeholder="Cari nama, order, antrian..." class="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none">
+                            </div>
+
+                            <!-- Filter Status Dropdown -->
+                            <select id="history-filter-status" onchange="renderHistoryTable()" class="py-2 px-3 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                                <option value="all">Semua Status</option>
+                                <option value="Menunggu">Menunggu</option>
+                                <option value="Diproses">Diproses</option>
+                                <option value="Selesai">Selesai</option>
+                                <option value="Batal">Batal</option>
+                            </select>
+
+                            <!-- Export CSV Button -->
+                            <button onclick="exportHistoryCSV()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-sm transition">
+                                <i class="fa-solid fa-file-excel"></i>
+                                <span>Export CSV</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- History Table -->
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50 text-slate-500 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200">
+                                    <th class="py-3.5 px-6">No. Antrian</th>
+                                    <th class="py-3.5 px-6">Nama Pemohon</th>
+                                    <th class="py-3.5 px-6">No. Order</th>
+                                    <th class="py-3.5 px-6">Jenis Layanan</th>
+                                    <th class="py-3.5 px-6">Waktu Daftar</th>
+                                    <th class="py-3.5 px-6">Status</th>
+                                    <th class="py-3.5 px-6 text-right">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-table-body" class="divide-y divide-slate-200 text-xs text-slate-700">
+                                <!-- Dynamic Rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SUB-PAGE 3: STUDIO PRINT CANVA-STYLE (Interactive Canvas) -->
+            <div id="admin-sub-studio" class="hidden flex-1 flex flex-col bg-slate-100 overflow-hidden">
+                <!-- Studio Toolbar & Controls -->
+                <div class="bg-white border-b border-slate-200 p-3 flex flex-wrap items-center justify-between gap-3 px-6 shadow-sm z-20">
+                    
+                    <!-- Paper Size Presets Selector -->
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                            <i class="fa-solid fa-scroll text-indigo-600"></i> Ukuran Kertas:
+                        </label>
+                        <select id="studio-paper-preset" onchange="handlePaperPresetChange()" class="py-1.5 px-3 border border-slate-300 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-indigo-500 bg-white">
+                            <option value="A4">A4 (210 x 297 mm)</option>
+                            <option value="A5">A5 (148 x 210 mm)</option>
+                            <option value="A3">A3 (297 x 420 mm)</option>
+                            <option value="Letter">Letter (216 x 279 mm)</option>
+                            <option value="Thermal80">Thermal 80mm</option>
+                            <option value="Thermal58">Thermal 58mm</option>
+                            <option value="IDCard">ID Card (86 x 54 mm)</option>
+                            <option value="Custom">Custom Dimension (mm)...</option>
+                        </select>
+
+                        <!-- Custom Dimension Inputs (Hidden by default) -->
+                        <div id="studio-custom-dim" class="hidden items-center gap-1">
+                            <input type="number" id="custom-w" placeholder="W (mm)" class="w-16 py-1 px-2 border rounded text-xs">
+                            <span class="text-xs">x</span>
+                            <input type="number" id="custom-h" placeholder="H (mm)" class="w-16 py-1 px-2 border rounded text-xs">
+                            <button onclick="applyCustomDimensions()" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs">OK</button>
+                        </div>
+
+                        <!-- Orientation Switcher -->
+                        <button onclick="toggleOrientation()" class="p-1.5 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600 text-xs flex items-center gap-1" title="Putar Orientasi Kertas">
+                            <i class="fa-solid fa-rotate"></i>
+                            <span id="lbl-orientation" class="font-medium">Portrait</span>
+                        </button>
+                    </div>
+
+                    <!-- Quick Print & Export Actions -->
+                    <div class="flex items-center gap-2">
+                        <button onclick="clearCanvasStudio()" class="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-600 rounded-lg text-xs font-semibold flex items-center gap-1">
+                            <i class="fa-solid fa-trash-can"></i> Reset
+                        </button>
+                        <button onclick="exportCanvasImage('png')" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold flex items-center gap-1">
+                            <i class="fa-solid fa-file-image"></i> Export PNG
+                        </button>
+                        <button onclick="triggerPrintStudio()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-sm flex items-center gap-1.5">
+                            <i class="fa-solid fa-print"></i> Cetak Dokumen
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Studio Workspace Layout (Sidebar Tools + Canvas Area) -->
+                <div class="flex-1 flex overflow-hidden">
+                    
+                    <!-- LEFT SIDEBAR: Elements & Add-ons Library -->
+                    <div class="w-72 bg-white border-r border-slate-200 overflow-y-auto p-4 space-y-6 flex-shrink-0">
+                        
+                        <!-- Section 1: Auto Dropdown Pemilihan Antrian Pemohon -->
+                        <div>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                                <i class="fa-solid fa-file-circle-plus text-indigo-600"></i> Dokumen Pemohon
+                            </h3>
+                            <div class="space-y-2">
+                                <select id="studio-applicant-select" onchange="onApplicantDropdownSelect(this.value)" class="w-full py-2 px-3 border border-slate-300 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500 bg-white">
+                                    <option value="">-- Pilih Antrian Pemohon --</option>
+                                    <!-- Dynamic Applicant Options -->
+                                </select>
+                                <p id="studio-active-doc-lbl" class="text-[11px] text-slate-400 italic text-center">Pilih antrian untuk memasukkan dokumen</p>
+                            </div>
+                        </div>
+
+                        <!-- Section 2: Header Resmi / Kop Surat -->
+                        <div>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                                <i class="fa-solid fa-heading text-indigo-600"></i> Header Resmi
+                            </h3>
+                            <button onclick="addOfficialHeader()" class="w-full py-2 px-3 border border-slate-200 rounded-xl hover:bg-slate-50 text-xs font-medium text-slate-700 flex items-center gap-2 transition">
+                                <i class="fa-solid fa-newspaper text-slate-500"></i>
+                                <span>+ Kop Surat Instansi / Logo</span>
+                            </button>
+                        </div>
+
+                        <!-- Section 3: Stamp Verifikasi -->
+                        <div>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                                <i class="fa-solid fa-stamp text-indigo-600"></i> Stamp Verifikasi
+                            </h3>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="addVerificationStamp('APPROVED')" class="py-2 px-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 rounded-xl text-xs font-bold flex items-center justify-center gap-1">
+                                    <i class="fa-solid fa-circle-check"></i> ACC / OK
+                                </button>
+                                <button onclick="addVerificationStamp('REJECTED')" class="py-2 px-2 bg-rose-50 hover:bg-rose-100 border border-rose-300 text-rose-800 rounded-xl text-xs font-bold flex items-center justify-center gap-1">
+                                    <i class="fa-solid fa-circle-xmark"></i> BATAL
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Section 4: Barcode & QR Code -->
+                        <div>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                                <i class="fa-solid fa-barcode text-indigo-600"></i> Barcode & QR Code
+                            </h3>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="addBarcodeToCanvas()" class="py-2 px-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-xs font-medium text-slate-700 flex items-center justify-center gap-1">
+                                    <i class="fa-solid fa-barcode"></i> CODE128
+                                </button>
+                                <button onclick="addQRCodeToCanvas()" class="py-2 px-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-xs font-medium text-slate-700 flex items-center justify-center gap-1">
+                                    <i class="fa-solid fa-qrcode"></i> QR Code
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Section 5: Teks Kustom -->
+                        <div>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                                <i class="fa-solid fa-font text-indigo-600"></i> Teks Kustom
+                            </h3>
+                            <div class="space-y-1.5">
+                                <button onclick="addCustomText('Judul Utama Dokumen', 24, true)" class="w-full py-1.5 px-3 text-left border border-slate-200 rounded-lg hover:bg-slate-50 text-xs font-bold text-slate-800">+ Tambah Judul</button>
+                                <button onclick="addCustomText('Subjudul / Keterangan Tambahan', 16, false)" class="w-full py-1.5 px-3 text-left border border-slate-200 rounded-lg hover:bg-slate-50 text-xs font-medium text-slate-700">+ Tambah Subjudul</button>
+                                <button onclick="addCustomText('Catatan Kaki / Tanggal Verifikasi', 12, false)" class="w-full py-1.5 px-3 text-left border border-slate-200 rounded-lg hover:bg-slate-50 text-[11px] text-slate-500">+ Tambah Catatan Kaki</button>
+                            </div>
+                        </div>
+
+                        <!-- Section 6: Shape & Divider -->
+                        <div>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                                <i class="fa-solid fa-shapes text-indigo-600"></i> Shapes & Garis
+                            </h3>
+                            <div class="grid grid-cols-3 gap-2">
+                                <button onclick="addShape('rect')" class="py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-xs flex justify-center items-center" title="Kotak"><i class="fa-regular fa-square text-base"></i></button>
+                                <button onclick="addShape('circle')" class="py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-xs flex justify-center items-center" title="Lingkaran"><i class="fa-regular fa-circle text-base"></i></button>
+                                <button onclick="addShape('line')" class="py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-xs flex justify-center items-center" title="Garis"><i class="fa-solid fa-minus text-base"></i></button>
+                            </div>
+                        </div>
+
+                        <!-- Section 7: Layer Control & Duplicate Panel -->
+                        <div class="pt-2 border-t border-slate-200">
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                                <i class="fa-solid fa-layer-group text-indigo-600"></i> Control & Layer
+                            </h3>
+                            <div class="grid grid-cols-2 gap-2 text-[11px]">
+                                <button onclick="cloneActiveObject()" class="py-1.5 px-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 rounded-lg font-bold"><i class="fa-solid fa-clone"></i> Duplikat</button>
+                                <button onclick="deleteSelectedObject()" class="py-1.5 px-2 bg-rose-100 hover:bg-rose-200 text-rose-800 rounded-lg font-bold"><i class="fa-solid fa-trash"></i> Hapus</button>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 mt-2 text-[11px]">
+                                <button onclick="bringForward()" class="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium text-slate-700"><i class="fa-solid fa-angle-up"></i> Maju Layer</button>
+                                <button onclick="sendBackward()" class="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium text-slate-700"><i class="fa-solid fa-angle-down"></i> Mundur Layer</button>
+                                <button onclick="bringToFront()" class="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium text-slate-700"><i class="fa-solid fa-angles-up"></i> Ke Paling Depan</button>
+                                <button onclick="sendToBack()" class="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium text-slate-700"><i class="fa-solid fa-angles-down"></i> Ke Paling Belakang</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CANVAS WORKSPACE VIEWPORT -->
+                    <div class="flex-1 overflow-auto bg-slate-200/80 p-8 flex items-center justify-center relative">
+                        <div id="canvas-paper-wrapper" class="transition-all duration-300">
+                            <canvas id="fabric-canvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- PRINT CONTAINER wrapper FOR DYNAMIC CETAK -->
+    <div id="print-area-wrapper" class="hidden"></div>
+
+    <!-- MODAL PREVIEW DOKUMEN -->
+    <div id="modal-preview" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl">
+            <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                <h3 class="font-bold text-slate-800 text-sm">Preview Dokumen Pemohon</h3>
+                <button onclick="closePreviewModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div class="p-4 flex items-center justify-center bg-slate-100 max-h-[80vh] overflow-auto">
+                <img id="modal-preview-img" src="" class="max-w-full max-h-[70vh] object-contain rounded-lg shadow-md">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* ========================================== */
+        /* GLOBAL STATE & AUTHENTICATION CONSTANTS   */
+        /* ========================================== */
+        const ADMIN_PASSWORD_HASH = "Nabati12"; // Password admin yang ditentukan
+        let isAdminLoggedIn = false;
+
+        let queueData = [];
+        let currentQueueItem = null;
+        let fabricCanvas = null;
+        let selectedPaperPreset = 'A4';
+        let paperOrientation = 'portrait'; // portrait or landscape
+        
+        // Paper Dimensions in Millimeters
+        const PAPER_SIZES_MM = {
+            'A4': { w: 210, h: 297 },
+            'A5': { w: 148, h: 210 },
+            'A3': { w: 297, h: 420 },
+            'Letter': { w: 215.9, h: 279.4 },
+            'Thermal80': { w: 80, h: 200 },
+            'Thermal58': { w: 58, h: 150 },
+            'IDCard': { w: 86, h: 54 }
+        };
+
+        let selectedFileBase64 = null;
+        let selectedFileName = '';
+        let selectedFileSize = '';
+
+        window.onload = function() {
+            checkAdminAuthSession();
+            loadInitialData();
+            initFabricCanvas();
+            renderQueueGrid();
+            renderHistoryTable();
+            populateStudioApplicantDropdown();
+
+            // Keyboard shortcut delete for canvas
+            document.addEventListener('keydown', function(e) {
+                if ((e.key === 'Delete' || e.key === 'Backspace') && fabricCanvas && fabricCanvas.getActiveObject()) {
+                    if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+                    deleteSelectedObject();
+                }
+            });
+        };
+
+        /* ========================================== */
+        /* ADMIN AUTHENTICATION LOGIC               */
+        /* ========================================== */
+        function checkAdminAuthSession() {
+            const authStatus = sessionStorage.getItem('docuprint_admin_auth');
+            if (authStatus === 'true') {
+                isAdminLoggedIn = true;
+                document.getElementById('btn-admin-logout').classList.remove('hidden');
+            }
+        }
+
+        function handleAdminLogin(e) {
+            e.preventDefault();
+            const passInput = document.getElementById('admin-pass-input').value;
+            const errEl = document.getElementById('admin-login-error');
+
+            if (passInput === ADMIN_PASSWORD_HASH) {
+                isAdminLoggedIn = true;
+                sessionStorage.setItem('docuprint_admin_auth', 'true');
+                errEl.classList.add('hidden');
+                document.getElementById('admin-pass-input').value = '';
+                document.getElementById('admin-login-modal').classList.add('hidden');
+                document.getElementById('btn-admin-logout').classList.remove('hidden');
+
+                // Perform panel switch
+                executeAdminPanelAccess();
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Akses Diberikan',
+                    text: 'Selamat datang di Panel Administrasi DocuPrint.',
+                    timer: 1500,
+                    showConfirmButton: false
+                });
+            } else {
+                errEl.classList.remove('hidden');
+            }
+        }
+
+        function logoutAdmin() {
+            isAdminLoggedIn = false;
+            sessionStorage.removeItem('docuprint_admin_auth');
+            document.getElementById('btn-admin-logout').classList.add('hidden');
+            switchPanel('public');
+            Swal.fire({
+                icon: 'info',
+                title: 'Logout Berhasil',
+                text: 'Akses administrasi telah dikunci kembali.',
+                timer: 1500,
+                showConfirmButton: false
+            });
+        }
+
+        // Initialize Local Storage with default mock items if empty
+        function loadInitialData() {
+            const saved = localStorage.getItem('docuprint_queue_data');
+            if (saved) {
+                queueData = JSON.parse(saved);
+            } else {
+                queueData = [
+                    {
+                        id: 'Q-101',
+                        queueNum: 'A-001',
+                        name: 'Budi Santoso',
+                        orderNum: 'ORD-9921',
+                        service: 'Cetak Dokumen Resmi',
+                        timestamp: new Date(Date.now() - 3600000).toLocaleString('id-ID'),
+                        status: 'Menunggu',
+                        fileData: generateSampleDocumentImageData('Ijazah & Sertifikat Legalisir')
+                    },
+                    {
+                        id: 'Q-102',
+                        queueNum: 'A-002',
+                        name: 'Siti Rahmawati',
+                        orderNum: 'ORD-9922',
+                        service: 'Cetak Sertifikat / ID Card',
+                        timestamp: new Date(Date.now() - 1800000).toLocaleString('id-ID'),
+                        status: 'Diproses',
+                        fileData: generateSampleDocumentImageData('Kartu Tanda Anggota')
+                    }
+                ];
+                saveToLocalStorage();
+            }
+            updateWaitingBadge();
+        }
+
+        function saveToLocalStorage() {
+            localStorage.setItem('docuprint_queue_data', JSON.stringify(queueData));
+            updateWaitingBadge();
+            populateStudioApplicantDropdown();
+        }
+
+        function updateWaitingBadge() {
+            const waitingCount = queueData.filter(q => q.status === 'Menunggu').length;
+            document.getElementById('badge-waiting-count').innerText = waitingCount;
+        }
+
+        /* ========================================== */
+        /* NAVIGATION & PROTECTED PANEL SWITCHING     */
+        /* ========================================== */
+        function switchPanel(panel) {
+            const publicPanel = document.getElementById('panel-public');
+            const adminPanel = document.getElementById('panel-admin');
+            const btnPublic = document.getElementById('btn-nav-public');
+            const btnAdmin = document.getElementById('btn-nav-admin');
+
+            if (panel === 'public') {
+                publicPanel.classList.remove('hidden');
+                adminPanel.classList.add('hidden');
+                document.getElementById('admin-login-modal').classList.add('hidden');
+                btnPublic.className = "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 bg-indigo-600 text-white shadow-sm";
+                btnAdmin.className = "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 text-indigo-200 hover:text-white hover:bg-indigo-800/50";
+            } else if (panel === 'admin') {
+                if (!isAdminLoggedIn) {
+                    // Show Login Modal
+                    document.getElementById('admin-login-error').classList.add('hidden');
+                    document.getElementById('admin-login-modal').classList.remove('hidden');
+                } else {
+                    executeAdminPanelAccess();
+                }
+            }
+        }
+
+        function executeAdminPanelAccess() {
+            const publicPanel = document.getElementById('panel-public');
+            const adminPanel = document.getElementById('panel-admin');
+            const btnPublic = document.getElementById('btn-nav-public');
+            const btnAdmin = document.getElementById('btn-nav-admin');
+
+            publicPanel.classList.add('hidden');
+            adminPanel.classList.remove('hidden');
+            btnAdmin.className = "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 bg-indigo-600 text-white shadow-sm";
+            btnPublic.className = "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 text-indigo-200 hover:text-white hover:bg-indigo-800/50";
+        }
+
+        function switchAdminSubPage(sub) {
+            const queueSub = document.getElementById('admin-sub-queue');
+            const historySub = document.getElementById('admin-sub-history');
+            const studioSub = document.getElementById('admin-sub-studio');
+
+            const tabQ = document.getElementById('admin-tab-queue');
+            const tabH = document.getElementById('admin-tab-history');
+            const tabS = document.getElementById('admin-tab-studio');
+
+            const activeClass = "border-indigo-600 text-indigo-600 border-b-2 py-4 px-1 text-sm font-semibold whitespace-nowrap flex items-center gap-2";
+            const inactiveClass = "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 border-b-2 py-4 px-1 text-sm font-semibold whitespace-nowrap flex items-center gap-2";
+
+            queueSub.classList.add('hidden');
+            historySub.classList.add('hidden');
+            studioSub.classList.add('hidden');
+
+            tabQ.className = inactiveClass;
+            tabH.className = inactiveClass;
+            tabS.className = inactiveClass;
+
+            if (sub === 'queue') {
+                queueSub.classList.remove('hidden');
+                tabQ.className = activeClass;
+                renderQueueGrid();
+            } else if (sub === 'history') {
+                historySub.classList.remove('hidden');
+                tabH.className = activeClass;
+                renderHistoryTable();
+            } else if (sub === 'studio') {
+                studioSub.classList.remove('hidden');
+                tabS.className = activeClass;
+                // Refit fabric canvas container size
+                setTimeout(() => { updatePaperDimensions(); }, 100);
+            }
+        }
+
+
+        /* ========================================== */
+        /* PUBLIC REGISTRATION FORM & TICKET SYSTEM   */
+        /* ========================================== */
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            selectedFileName = file.name;
+            selectedFileSize = (file.size / 1024).toFixed(1) + ' KB';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                selectedFileBase64 = e.target.result;
+                document.getElementById('preview-thumbnail').src = selectedFileBase64;
+                document.getElementById('preview-filename').innerText = selectedFileName;
+                document.getElementById('preview-filesize').innerText = selectedFileSize;
+                document.getElementById('file-preview-container').classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function clearFileSelection() {
+            selectedFileBase64 = null;
+            selectedFileName = '';
+            selectedFileSize = '';
+            document.getElementById('reg-file').value = '';
+            document.getElementById('file-preview-container').classList.add('hidden');
+        }
+
+        function openPreviewModal() {
+            if (!selectedFileBase64) return;
+            document.getElementById('modal-preview-img').src = selectedFileBase64;
+            document.getElementById('modal-preview').classList.remove('hidden');
+        }
+
+        function closePreviewModal() {
+            document.getElementById('modal-preview').classList.add('hidden');
+        }
+
+        function handleRegistration(e) {
+            e.preventDefault();
+
+            if (!selectedFileBase64) {
+                Swal.fire('Peringatan', 'Silakan unggah berkas dokumen terlebih dahulu.', 'warning');
+                return;
+            }
+
+            const name = document.getElementById('reg-name').value;
+            const orderNum = document.getElementById('reg-order').value.toUpperCase();
+            const service = document.getElementById('reg-service').value;
+
+            // Generate Queue Sequence Number (e.g., A-003)
+            const seq = (queueData.length + 1).toString().padStart(3, '0');
+            const queueNum = `A-${seq}`;
+            const timeStr = new Date().toLocaleString('id-ID');
+
+            const newItem = {
+                id: 'Q-' + Date.now(),
+                queueNum: queueNum,
+                name: name,
+                orderNum: orderNum,
+                service: service,
+                timestamp: timeStr,
+                status: 'Menunggu',
+                fileData: selectedFileBase64
+            };
+
+            queueData.push(newItem);
+            saveToLocalStorage();
+
+            // Populate Ticket Display
+            document.getElementById('ticket-number').innerText = queueNum;
+            document.getElementById('ticket-name').innerText = name;
+            document.getElementById('ticket-order').innerText = orderNum;
+            document.getElementById('ticket-service').innerText = service;
+            document.getElementById('ticket-time').innerText = timeStr;
+
+            // Generate Ticket Barcode & QR Code
+            JsBarcode("#ticket-barcode", orderNum, { format: "CODE128", height: 40, displayValue: false });
+            
+            const qrContainer = document.getElementById('ticket-qrcode');
+            qrContainer.innerHTML = '';
+            new QRCode(qrContainer, {
+                text: `${queueNum}|${orderNum}|${name}`,
+                width: 90,
+                height: 90
+            });
+
+            // Toggle Display View
+            document.getElementById('public-form-container').classList.add('hidden');
+            document.getElementById('public-ticket-container').classList.remove('hidden');
+        }
+
+        function resetPublicForm() {
+            document.getElementById('form-registration').reset();
+            clearFileSelection();
+            document.getElementById('public-form-container').classList.remove('hidden');
+            document.getElementById('public-ticket-container').classList.add('hidden');
+        }
+
+
+        /* ========================================== */
+        /* ADMIN QUEUE MANAGEMENT & TEXT-TO-SPEECH   */
+        /* ========================================== */
+        let currentStatusFilter = 'all';
+
+        function filterQueueStatus(status) {
+            currentStatusFilter = status;
+            
+            ['all', 'waiting', 'processing', 'completed'].forEach(id => {
+                const el = document.getElementById(`qfilter-${id}`);
+                if (el) el.className = "px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900";
+            });
+
+            let activeBtnId = 'all';
+            if (status === 'Menunggu') activeBtnId = 'waiting';
+            if (status === 'Diproses') activeBtnId = 'processing';
+            if (status === 'Selesai') activeBtnId = 'completed';
+            
+            document.getElementById(`qfilter-${activeBtnId}`).className = "px-3 py-1.5 rounded-lg bg-white text-slate-800 shadow-sm font-semibold";
+
+            renderQueueGrid();
+        }
+
+        function renderQueueGrid() {
+            const grid = document.getElementById('queue-grid');
+            const emptyState = document.getElementById('queue-empty');
+            grid.innerHTML = '';
+
+            let filtered = queueData;
+            if (currentStatusFilter !== 'all') {
+                if (currentStatusFilter === 'Selesai') {
+                    filtered = queueData.filter(q => q.status === 'Selesai' || q.status === 'Batal');
+                } else {
+                    filtered = queueData.filter(q => q.status === currentStatusFilter);
+                }
+            }
+
+            if (filtered.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            } else {
+                emptyState.classList.add('hidden');
+            }
+
+            filtered.forEach(item => {
+                let badgeBg = 'bg-amber-100 text-amber-800';
+                if (item.status === 'Diproses') badgeBg = 'bg-indigo-100 text-indigo-800';
+                if (item.status === 'Selesai') badgeBg = 'bg-emerald-100 text-emerald-800';
+                if (item.status === 'Batal') badgeBg = 'bg-rose-100 text-rose-800';
+
+                const card = document.createElement('div');
+                card.className = "bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4 hover:shadow-md transition relative flex flex-col justify-between";
+                card.innerHTML = `
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <div>
+                                <span class="text-[10px] font-bold uppercase text-slate-400">Nomor Antrian</span>
+                                <h3 class="font-heading text-2xl font-extrabold text-indigo-700">${item.queueNum}</h3>
+                            </div>
+                            <span class="px-2.5 py-1 rounded-full text-xs font-bold ${badgeBg}">${item.status}</span>
+                        </div>
+
+                        <div class="space-y-1 text-xs">
+                            <div class="flex justify-between"><span class="text-slate-500">Nama:</span><span class="font-semibold text-slate-800">${item.name}</span></div>
+                            <div class="flex justify-between"><span class="text-slate-500">No. Order:</span><span class="font-mono font-medium text-slate-700">${item.orderNum}</span></div>
+                            <div class="flex justify-between"><span class="text-slate-500">Layanan:</span><span class="text-indigo-600 font-medium">${item.service}</span></div>
+                            <div class="flex justify-between"><span class="text-slate-500">Waktu:</span><span class="text-slate-400 text-[11px]">${item.timestamp}</span></div>
+                        </div>
+
+                        <!-- Document Thumbnail -->
+                        <div class="pt-1">
+                            <img src="${item.fileData}" class="w-full h-24 object-cover rounded-xl border border-slate-200 bg-slate-50 cursor-pointer hover:opacity-90 transition" onclick="openModalWithImage('${item.fileData}')">
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="pt-2 border-t border-slate-100 space-y-2">
+                        <button onclick="speakQueueNumber('${item.queueNum}', '${item.name}')" class="w-full bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold py-2 px-3 rounded-xl transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-volume-high text-amber-400"></i>
+                            <span>Panggil Antrian</span>
+                        </button>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <select onchange="updateQueueStatus('${item.id}', this.value)" class="py-1.5 px-2 border border-slate-300 rounded-xl text-xs font-medium bg-white focus:ring-1 focus:ring-indigo-500">
+                                <option value="Menunggu" ${item.status === 'Menunggu' ? 'selected' : ''}>Menunggu</option>
+                                <option value="Diproses" ${item.status === 'Diproses' ? 'selected' : ''}>Diproses</option>
+                                <option value="Selesai" ${item.status === 'Selesai' ? 'selected' : ''}>Selesai</option>
+                                <option value="Batal" ${item.status === 'Batal' ? 'selected' : ''}>Batal</option>
+                            </select>
+
+                            <button onclick="sendToStudio('${item.id}')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold py-1.5 px-2 rounded-xl transition flex items-center justify-center gap-1 shadow-sm">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                <span>Ke Studio</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // Text-to-speech in Indonesian
+        function speakQueueNumber(queueNum, name) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+
+                const text = `Nomor antrian ${queueNum.replace('-', ' ')}, atas nama ${name}, silakan menuju ke loket administrasi.`;
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'id-ID';
+                utterance.rate = 0.9;
+                utterance.pitch = 1.0;
+
+                window.speechSynthesis.speak(utterance);
+            } else {
+                Swal.fire('Informasi', 'Browser Anda tidak mendukung pemanggilan suara Web Speech API.', 'info');
+            }
+        }
+
+        function updateQueueStatus(id, newStatus) {
+            const idx = queueData.findIndex(q => q.id === id);
+            if (idx !== -1) {
+                queueData[idx].status = newStatus;
+                saveToLocalStorage();
+                renderQueueGrid();
+                renderHistoryTable();
+            }
+        }
+
+        function openModalWithImage(imgSrc) {
+            document.getElementById('modal-preview-img').src = imgSrc;
+            document.getElementById('modal-preview').classList.remove('hidden');
+        }
+
+        function sendToStudio(id) {
+            const item = queueData.find(q => q.id === id);
+            if (!item) return;
+
+            currentQueueItem = item;
+            document.getElementById('studio-applicant-select').value = id;
+            document.getElementById('studio-active-doc-lbl').innerText = `Dokumen Aktif: ${item.queueNum} (${item.name})`;
+
+            switchAdminSubPage('studio');
+            setTimeout(() => {
+                loadCurrentQueueDocument();
+            }, 300);
+        }
+
+        function populateStudioApplicantDropdown() {
+            const select = document.getElementById('studio-applicant-select');
+            if (!select) return;
+
+            select.innerHTML = `<option value="">-- Pilih Antrian Pemohon --</option>`;
+            queueData.forEach(q => {
+                const opt = document.createElement('option');
+                opt.value = q.id;
+                opt.innerText = `${q.queueNum} - ${q.name} (${q.orderNum})`;
+                select.appendChild(opt);
+            });
+        }
+
+        function onApplicantDropdownSelect(id) {
+            if (!id) return;
+            sendToStudio(id);
+        }
+
+
+        /* ========================================== */
+        /* HISTORY TABLE & CSV EXPORT                */
+        /* ========================================== */
+        function renderHistoryTable() {
+            const tbody = document.getElementById('history-table-body');
+            const searchVal = document.getElementById('history-search').value.toLowerCase();
+            const filterVal = document.getElementById('history-filter-status').value;
+
+            tbody.innerHTML = '';
+
+            const filtered = queueData.filter(item => {
+                const matchesSearch = item.name.toLowerCase().includes(searchVal) ||
+                                      item.orderNum.toLowerCase().includes(searchVal) ||
+                                      item.queueNum.toLowerCase().includes(searchVal);
+                const matchesStatus = (filterVal === 'all') || (item.status === filterVal);
+                return matchesSearch && matchesStatus;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400">Tidak ada data riwayat antrian ditemukan.</td></tr>`;
+                return;
+            }
+
+            filtered.forEach(item => {
+                let badgeBg = 'bg-amber-100 text-amber-800';
+                if (item.status === 'Diproses') badgeBg = 'bg-indigo-100 text-indigo-800';
+                if (item.status === 'Selesai') badgeBg = 'bg-emerald-100 text-emerald-800';
+                if (item.status === 'Batal') badgeBg = 'bg-rose-100 text-rose-800';
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition";
+                tr.innerHTML = `
+                    <td class="py-3.5 px-6 font-bold text-indigo-700 font-heading">${item.queueNum}</td>
+                    <td class="py-3.5 px-6 font-semibold text-slate-800">${item.name}</td>
+                    <td class="py-3.5 px-6 font-mono">${item.orderNum}</td>
+                    <td class="py-3.5 px-6">${item.service}</td>
+                    <td class="py-3.5 px-6 text-slate-500">${item.timestamp}</td>
+                    <td class="py-3.5 px-6"><span class="px-2.5 py-1 rounded-full text-[10px] font-bold ${badgeBg}">${item.status}</span></td>
+                    <td class="py-3.5 px-6 text-right space-x-2">
+                        <button onclick="sendToStudio('${item.id}')" class="text-indigo-600 hover:text-indigo-900 font-semibold" title="Buka di Studio Cetak"><i class="fa-solid fa-wand-magic-sparkles"></i></button>
+                        <button onclick="deleteQueueItem('${item.id}')" class="text-rose-500 hover:text-rose-700 font-semibold" title="Hapus Log"><i class="fa-solid fa-trash"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function deleteQueueItem(id) {
+            Swal.fire({
+                title: 'Konfirmasi Hapus',
+                text: 'Hapus catatan antrian ini?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#e11d48',
+                confirmButtonText: 'Hapus',
+                cancelButtonText: 'Batal'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    queueData = queueData.filter(q => q.id !== id);
+                    saveToLocalStorage();
+                    renderQueueGrid();
+                    renderHistoryTable();
+                }
+            });
+        }
+
+        function exportHistoryCSV() {
+            if (queueData.length === 0) {
+                Swal.fire('Informasi', 'Tidak ada data antrian untuk diekspor.', 'info');
+                return;
+            }
+
+            let csv = 'ID,No Antrian,Nama Pemohon,No Order,Jenis Layanan,Waktu Pendaftaran,Status\n';
+
+            queueData.forEach(item => {
+                const row = [
+                    `"${item.id}"`,
+                    `"${item.queueNum}"`,
+                    `"${item.name.replace(/"/g, '""')}"`,
+                    `"${item.orderNum}"`,
+                    `"${item.service.replace(/"/g, '""')}"`,
+                    `"${item.timestamp}"`,
+                    `"${item.status}"`
+                ];
+                csv += row.join(',') + '\n';
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `Riwayat_Antrian_DocuPrint_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+
+        /* ========================================== */
+        /* STUDIO PRINT CANVA-STYLE (Fabric.js)       */
+        /* ========================================== */
+        function initFabricCanvas() {
+            fabricCanvas = new fabric.Canvas('fabric-canvas', {
+                width: 595,
+                height: 842,
+                backgroundColor: '#ffffff',
+                preserveObjectStacking: true
+            });
+
+            updatePaperDimensions();
+        }
+
+        function handlePaperPresetChange() {
+            const preset = document.getElementById('studio-paper-preset').value;
+            const customDimBox = document.getElementById('studio-custom-dim');
+
+            if (preset === 'Custom') {
+                customDimBox.classList.remove('hidden');
+                customDimBox.classList.add('flex');
+            } else {
+                customDimBox.classList.add('hidden');
+                customDimBox.classList.remove('flex');
+                selectedPaperPreset = preset;
+                updatePaperDimensions();
+            }
+        }
+
+        function applyCustomDimensions() {
+            const w = parseFloat(document.getElementById('custom-w').value) || 210;
+            const h = parseFloat(document.getElementById('custom-h').value) || 297;
+            PAPER_SIZES_MM['Custom'] = { w: w, h: h };
+            selectedPaperPreset = 'Custom';
+            updatePaperDimensions();
+        }
+
+        function toggleOrientation() {
+            paperOrientation = (paperOrientation === 'portrait') ? 'landscape' : 'portrait';
+            document.getElementById('lbl-orientation').innerText = paperOrientation.charAt(0).toUpperCase() + paperOrientation.slice(1);
+            updatePaperDimensions();
+        }
+
+        function updatePaperDimensions() {
+            if (!fabricCanvas) return;
+
+            let size = PAPER_SIZES_MM[selectedPaperPreset] || PAPER_SIZES_MM['A4'];
+            let mmW = size.w;
+            let mmH = size.h;
+
+            if (paperOrientation === 'landscape') {
+                let temp = mmW;
+                mmW = mmH;
+                mmH = temp;
+            }
+
+            const pxPerMm = 2.835;
+            const targetPxWidth = Math.round(mmW * pxPerMm);
+            const targetPxHeight = Math.round(mmH * pxPerMm);
+
+            fabricCanvas.setWidth(targetPxWidth);
+            fabricCanvas.setHeight(targetPxHeight);
+            fabricCanvas.renderAll();
+
+            const wrapper = document.getElementById('canvas-paper-wrapper');
+            wrapper.style.width = targetPxWidth + 'px';
+            wrapper.style.height = targetPxHeight + 'px';
+        }
+
+        function loadCurrentQueueDocument() {
+            if (!currentQueueItem) return;
+
+            fabric.Image.fromURL(currentQueueItem.fileData, function(img) {
+                const canvasW = fabricCanvas.width;
+                const canvasH = fabricCanvas.height;
+                const scale = Math.min((canvasW * 0.8) / img.width, (canvasH * 0.8) / img.height);
+
+                img.set({
+                    left: canvasW / 2,
+                    top: canvasH / 2,
+                    originX: 'center',
+                    originY: 'center',
+                    scaleX: scale,
+                    scaleY: scale,
+                    cornerColor: '#4338ca',
+                    cornerSize: 10,
+                    transparentCorners: false
+                });
+
+                fabricCanvas.add(img);
+                fabricCanvas.setActiveObject(img);
+                fabricCanvas.renderAll();
+            });
+        }
+
+        function addOfficialHeader() {
+            const canvasW = fabricCanvas.width;
+
+            const headerGroup = new fabric.Group([], {
+                left: canvasW / 2,
+                top: 40,
+                originX: 'center',
+                originY: 'top'
+            });
+
+            const line = new fabric.Line([0, 45, canvasW - 80, 45], {
+                stroke: '#1e1b4b',
+                strokeWidth: 3,
+                originX: 'center'
+            });
+
+            const title = new fabric.Text('PEMERINTAH KOTA ADMINISTRASI RESMI', {
+                fontSize: 16,
+                fontWeight: 'bold',
+                fill: '#1e1b4b',
+                originX: 'center',
+                top: 0
+            });
+
+            const subtitle = new fabric.Text('DINAS PELAYANAN DOKUMEN & VERIFIKASI MASYARAKAT', {
+                fontSize: 11,
+                fill: '#475569',
+                originX: 'center',
+                top: 22
+            });
+
+            headerGroup.addWithUpdate(line);
+            headerGroup.addWithUpdate(title);
+            headerGroup.addWithUpdate(subtitle);
+
+            fabricCanvas.add(headerGroup);
+            fabricCanvas.setActiveObject(headerGroup);
+            fabricCanvas.renderAll();
+        }
+
+        function addVerificationStamp(type) {
+            const canvasW = fabricCanvas.width;
+            const canvasH = fabricCanvas.height;
+
+            const isApproved = (type === 'APPROVED');
+            const color = isApproved ? '#059669' : '#e11d48';
+            const label = isApproved ? 'DI-ACC / VERIFIED' : 'DITOLAK / BATAL';
+
+            const rect = new fabric.Rect({
+                width: 230,
+                height: 60,
+                fill: 'transparent',
+                stroke: color,
+                strokeWidth: 4,
+                rx: 10,
+                ry: 10,
+                originX: 'center',
+                originY: 'center'
+            });
+
+            const text = new fabric.Text(label, {
+                fontSize: 16,
+                fontWeight: 'bold',
+                fill: color,
+                originX: 'center',
+                originY: 'center'
+            });
+
+            const stampGroup = new fabric.Group([rect, text], {
+                left: canvasW / 2,
+                top: canvasH / 2,
+                originX: 'center',
+                originY: 'center',
+                angle: -12,
+                opacity: 0.85
+            });
+
+            fabricCanvas.add(stampGroup);
+            fabricCanvas.setActiveObject(stampGroup);
+            fabricCanvas.renderAll();
+        }
+
+        function addBarcodeToCanvas() {
+            const orderCode = currentQueueItem ? currentQueueItem.orderNum : 'ORD-2026-STAMP';
+            
+            const hiddenSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            JsBarcode(hiddenSvg, orderCode, { format: "CODE128", displayValue: true, fontSize: 12 });
+
+            const xml = new XMLSerializer().serializeToString(hiddenSvg);
+            const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(xml);
+
+            fabric.Image.fromURL(svgDataUrl, function(img) {
+                img.set({
+                    left: fabricCanvas.width / 2,
+                    top: fabricCanvas.height - 100,
+                    originX: 'center',
+                    originY: 'center'
+                });
+                fabricCanvas.add(img);
+                fabricCanvas.setActiveObject(img);
+                fabricCanvas.renderAll();
+            });
+        }
+
+        function addQRCodeToCanvas() {
+            const qrText = currentQueueItem ? `${currentQueueItem.queueNum}|${currentQueueItem.orderNum}` : 'VERIFIED-DOC-2026';
+            
+            const tempDiv = document.createElement('div');
+            new QRCode(tempDiv, {
+                text: qrText,
+                width: 120,
+                height: 120
+            });
+
+            setTimeout(() => {
+                const imgEl = tempDiv.querySelector('img');
+                if (imgEl) {
+                    fabric.Image.fromURL(imgEl.src, function(img) {
+                        img.set({
+                            left: fabricCanvas.width - 100,
+                            top: fabricCanvas.height - 100,
+                            originX: 'center',
+                            originY: 'center'
+                        });
+                        fabricCanvas.add(img);
+                        fabricCanvas.setActiveObject(img);
+                        fabricCanvas.renderAll();
+                    });
+                }
+            }, 100);
+        }
+
+        function addCustomText(defaultText, size, isBold) {
+            const text = new fabric.IText(defaultText, {
+                left: fabricCanvas.width / 2,
+                top: fabricCanvas.height / 2,
+                fontSize: size,
+                fontWeight: isBold ? 'bold' : 'normal',
+                fill: '#1e293b',
+                originX: 'center',
+                originY: 'center'
+            });
+            fabricCanvas.add(text);
+            fabricCanvas.setActiveObject(text);
+            fabricCanvas.renderAll();
+        }
+
+        function addShape(shapeType) {
+            let obj;
+            const center = { x: fabricCanvas.width / 2, y: fabricCanvas.height / 2 };
+
+            if (shapeType === 'rect') {
+                obj = new fabric.Rect({
+                    width: 120,
+                    height: 80,
+                    fill: '#e0e7ff',
+                    stroke: '#4338ca',
+                    strokeWidth: 2,
+                    left: center.x,
+                    top: center.y,
+                    originX: 'center',
+                    originY: 'center',
+                    rx: 6, ry: 6
+                });
+            } else if (shapeType === 'circle') {
+                obj = new fabric.Circle({
+                    radius: 50,
+                    fill: '#f0fdf4',
+                    stroke: '#16a34a',
+                    strokeWidth: 2,
+                    left: center.x,
+                    top: center.y,
+                    originX: 'center',
+                    originY: 'center'
+                });
+            } else if (shapeType === 'line') {
+                obj = new fabric.Line([0, 0, 200, 0], {
+                    stroke: '#334155',
+                    strokeWidth: 2,
+                    left: center.x,
+                    top: center.y,
+                    originX: 'center',
+                    originY: 'center'
+                });
+            }
+
+            if (obj) {
+                fabricCanvas.add(obj);
+                fabricCanvas.setActiveObject(obj);
+                fabricCanvas.renderAll();
+            }
+        }
+
+        /* Layer Controls & Cloning */
+        function cloneActiveObject() {
+            const activeObject = fabricCanvas.getActiveObject();
+            if (!activeObject) return;
+
+            activeObject.clone(function(clonedObj) {
+                fabricCanvas.discardActiveObject();
+                clonedObj.set({
+                    left: clonedObj.left + 15,
+                    top: clonedObj.top + 15,
+                    evented: true
+                });
+
+                if (clonedObj.type === 'activeSelection') {
+                    clonedObj.canvas = fabricCanvas;
+                    clonedObj.forEachObject(function(obj) {
+                        fabricCanvas.add(obj);
+                    });
+                    clonedObj.setCoordinates();
+                } else {
+                    fabricCanvas.add(clonedObj);
+                }
+
+                fabricCanvas.setActiveObject(clonedObj);
+                fabricCanvas.requestRenderAll();
+            });
+        }
+
+        function bringForward() {
+            const obj = fabricCanvas.getActiveObject();
+            if (obj) { fabricCanvas.bringForward(obj); fabricCanvas.renderAll(); }
+        }
+        function sendBackward() {
+            const obj = fabricCanvas.getActiveObject();
+            if (obj) { fabricCanvas.sendBackwards(obj); fabricCanvas.renderAll(); }
+        }
+        function bringToFront() {
+            const obj = fabricCanvas.getActiveObject();
+            if (obj) { fabricCanvas.bringToFront(obj); fabricCanvas.renderAll(); }
+        }
+        function sendToBack() {
+            const obj = fabricCanvas.getActiveObject();
+            if (obj) { fabricCanvas.sendToBack(obj); fabricCanvas.renderAll(); }
+        }
+        function deleteSelectedObject() {
+            const activeObjects = fabricCanvas.getActiveObjects();
+            if (activeObjects && activeObjects.length > 0) {
+                activeObjects.forEach(obj => fabricCanvas.remove(obj));
+                fabricCanvas.discardActiveObject();
+                fabricCanvas.renderAll();
+            }
+        }
+        function clearCanvasStudio() {
+            Swal.fire({
+                title: 'Reset Canvas',
+                text: 'Kosongkan seluruh elemen canvas?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Ya, Kosongkan'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fabricCanvas.clear();
+                    fabricCanvas.setBackgroundColor('#ffffff', fabricCanvas.renderAll.bind(fabricCanvas));
+                }
+            });
+        }
+
+        function exportCanvasImage(format) {
+            fabricCanvas.discardActiveObject();
+            fabricCanvas.renderAll();
+
+            const dataURL = fabricCanvas.toDataURL({
+                format: format,
+                quality: 1.0,
+                multiplier: 2
+            });
+
+            const link = document.createElement('a');
+            link.download = `Studio_Cetak_${Date.now()}.${format}`;
+            link.href = dataURL;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function triggerPrintStudio() {
+            fabricCanvas.discardActiveObject();
+            fabricCanvas.renderAll();
+
+            const dataURL = fabricCanvas.toDataURL({
+                format: 'png',
+                multiplier: 2
+            });
+
+            const printWrapper = document.getElementById('print-area-wrapper');
+            printWrapper.innerHTML = `<img src="${dataURL}">`;
+
+            let size = PAPER_SIZES_MM[selectedPaperPreset] || PAPER_SIZES_MM['A4'];
+            let pageW = size.w;
+            let pageH = size.h;
+            if (paperOrientation === 'landscape') {
+                pageW = size.h;
+                pageH = size.w;
+            }
+
+            let printStyle = document.getElementById('dynamic-print-style');
+            if (!printStyle) {
+                printStyle = document.createElement('style');
+                printStyle.id = 'dynamic-print-style';
+                document.head.appendChild(printStyle);
+            }
+            printStyle.innerHTML = `@page { size: ${pageW}mm ${pageH}mm; margin: 0; }`;
+
+            window.print();
+        }
+
+        function generateSampleDocumentImageData(title) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 400;
+            canvas.height = 300;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(0, 0, 400, 300);
+
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(10, 10, 380, 280);
+
+            ctx.fillStyle = '#1e293b';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.fillText('DOKUMEN HAK MILIK / RESMI', 30, 50);
+
+            ctx.fillStyle = '#475569';
+            ctx.font = '14px sans-serif';
+            ctx.fillText(`Subjek: ${title}`, 30, 80);
+            ctx.fillText('Terverifikasi oleh Petugas Administrasi', 30, 110);
+
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillRect(30, 140, 340, 10);
+            ctx.fillRect(30, 160, 280, 10);
+            ctx.fillRect(30, 180, 320, 10);
+
+            return canvas.toDataURL();
+        }
+    </script>
+</body>
+</html>
